@@ -96,7 +96,7 @@ class NominatimService(
                             displayName = o.optString("display_name", q),
                             latitude = lat,
                             longitude = lon,
-                            type = o.optString("type", null)
+                            type = if (o.has("type") && !o.isNull("type")) o.optString("type") else null
                         )
                     )
                 }

@@ -73,4 +73,8 @@ dependencies {
     // JSON parsing (built-in org.json is used; no extra dep needed)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    // Pure-JVM org.json implementation — the Android stub jar returns null for everything
+    // in unit tests unless Robolectric is used; using this artifact makes the tests run
+    // fast on plain JVM.
+    testImplementation("org.json:json:20240303")
 }
