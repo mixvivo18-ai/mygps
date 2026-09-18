@@ -130,11 +130,12 @@ class MockLocationEngine(private val context: Context) {
             // setTestProviderStatus requires the test provider status to be AVAILABLE
             // before location fixes are accepted by clients.
             try {
+                @Suppress("DEPRECATION")
                 lm.setTestProviderStatus(
                     PROVIDER_GPS,
                     LocationProvider.AVAILABLE,
                     /* extras = */ null,
-                    /* callbackIntent = */ null
+                    SystemClock.elapsedRealtimeNanos()
                 )
             } catch (e: Throwable) {
                 Log.w(TAG, "setTestProviderStatus failed (non-fatal)", e)
