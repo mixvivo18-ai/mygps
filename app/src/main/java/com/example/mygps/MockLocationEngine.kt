@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Criteria
 import android.location.Location
 import android.location.LocationManager
+import android.location.LocationProvider
 import android.location.provider.ProviderProperties
 import android.os.Build
 import android.os.SystemClock
@@ -36,17 +37,6 @@ import kotlinx.coroutines.launch
  * are supported.
  */
 class MockLocationEngine(private val context: Context) {
-
-    companion object {
-        private const val TAG = "MockLocationEngine"
-        const val PROVIDER_GPS = LocationManager.GPS_PROVIDER
-        const val DEFAULT_INTERVAL_MS = 1_500L
-        const val DEFAULT_ACCURACY_M = 5.0f
-
-        // Pre-API 28 numeric constants (kept for compatibility)
-        private const val PRE_28_POWER_HIGH = 3
-        private const val PRE_28_ACCURACY_FINE = 1
-    }
 
     enum class StartResult {
         OK,
@@ -99,13 +89,11 @@ class MockLocationEngine(private val context: Context) {
         try {
             // If a stale provider exists from a previous crash, remove it first.
             if (lm.allProviders.contains(PROVIDER_GPS)) {
-                // Best-effort cleanup of a test-only provider registered by us previously
                 try {
                     lm.removeTestProvider(PROVIDER_GPS)
                 } catch (_: IllegalArgumentException) {
                     // not ours, ignore
                 } catch (_: SecurityException) {
-                    // another app owns it
                     return StartResult.PROVIDER_ALREADY_PRESENT
                 }
             }
@@ -139,17 +127,17 @@ class MockLocationEngine(private val context: Context) {
 
             lm.setTestProviderEnabled(PROVIDER_GPS, true)
 
-            // API 24+ requires the status to be AVAILABLE before location fixes are accepted
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // setTestProviderStatus requires the test provider status to be AVAILABLE
+            // before location fixes are accepted by clients.
+            try {
                 lm.setTestProviderStatus(
                     PROVIDER_GPS,
-                    LocationManager.AVAILABLE,
+                    LocationProvider.AVAILABLE,
                     /* extras = */ null,
                     /* callbackIntent = */ null
                 )
-            } else {
-                @Suppress("DEPRECATION")
-                lm.setTestProviderStatus(PROVIDER_GPS, LocationManager.AVAILABLE, null)
+            } catch (e: Throwable) {
+                Log.w(TAG, "setTestProviderStatus failed (non-fatal)", e)
             }
 
             // Push an initial fix
@@ -244,6 +232,15 @@ class MockLocationEngine(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "MockLocationEngine"
+        const val PROVIDER_GPS: String = LocationManager.GPS_PROVIDER
+        const val DEFAULT_INTERVAL_MS: Long = 1_500L
+        const val DEFAULT_ACCURACY_M: Float = 5.0f
+
+        // Pre-API 28 numeric constants (kept for compatibility)
+        private const val PRE_28_POWER_HIGH = 3
+        private const val PRE_28_ACCURACY_FINE = 1
+
         @JvmStatic
         fun isValidLat(lat: Double) = !lat.isNaN() && lat in -90.0..90.0
 

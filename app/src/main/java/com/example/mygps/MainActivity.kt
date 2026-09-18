@@ -432,7 +432,9 @@ class MainActivity : AppCompatActivity() {
         val dialog = BottomSheetDialog(this)
         dialog.setContentView(view.root)
 
-        val adapter = SavedLocationsAdapter(
+        // Declare adapter reference up-front so the onDelete closure can capture it
+        var adapter: SavedLocationsAdapter? = null
+        adapter = SavedLocationsAdapter(
             onLoad = { saved ->
                 val p = GeoPoint(saved.latitude, saved.longitude)
                 binding.mapView.controller.setZoom(15.0)
@@ -444,7 +446,7 @@ class MainActivity : AppCompatActivity() {
             onDelete = { saved ->
                 savedLocations.delete(saved.name)
                 Toast.makeText(this, getString(R.string.saved_location_deleted, saved.name), Toast.LENGTH_SHORT).show()
-                refreshSavedList(view, adapter)
+                adapter?.let { refreshSavedList(view, it) }
             }
         )
         view.rvSavedLocations.layoutManager = LinearLayoutManager(this)
