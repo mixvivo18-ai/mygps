@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_play"
+        android:icon="@drawable/ic_play"
+        android:title="@string/action_play"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_stop"
+        android:icon="@drawable/ic_stop"
+        android:title="@string/action_stop"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_filter"
+        android:icon="@drawable/ic_filter"
+        android:title="@string/action_filter"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_more"
+        android:icon="@drawable/ic_more"
+        android:title="@string/action_more"
+        app:showAsAction="always" />
+
+</menu>

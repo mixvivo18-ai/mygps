@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+.gradle/
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+local.properties
+captures/
+.externalNativeBuild
+.cxx/
+
+# Misc
+*.log
+.DS_Store
+*.keystore
+keystore.properties

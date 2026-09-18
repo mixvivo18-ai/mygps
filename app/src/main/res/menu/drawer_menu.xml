@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_change_view"
+            android:title="@string/menu_change_view" />
+        <item
+            android:id="@+id/nav_search"
+            android:title="@string/menu_search" />
+        <item
+            android:id="@+id/nav_share"
+            android:title="@string/menu_share" />
+        <item
+            android:id="@+id/nav_rate"
+            android:title="@string/menu_rate" />
+        <item
+            android:id="@+id/nav_go_pro"
+            android:title="@string/menu_go_pro" />
+        <item
+            android:id="@+id/nav_privacy"
+            android:title="@string/menu_privacy" />
+        <item
+            android:id="@+id/nav_detect_mock"
+            android:title="@string/menu_detect_mock" />
+        <item
+            android:id="@+id/nav_dev_settings"
+            android:title="@string/menu_dev_settings" />
+        <item
+            android:id="@+id/nav_help"
+            android:title="@string/menu_help" />
+    </group>
+</menu>
