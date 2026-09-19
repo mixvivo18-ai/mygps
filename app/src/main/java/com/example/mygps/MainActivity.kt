@@ -88,16 +88,9 @@ class MainActivity : AppCompatActivity() {
         Configuration.getInstance().apply {
             userAgentValue = "SP/1.0 (https://github.com/mixvivo18-ai/mygps; contact via repo)"
             load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
-            // Clear any cached failed tiles from older builds that used a blocked UA.
-            // Safe to call every launch — osmdroid's clear is fast.
-            try {
-                Configuration.getInstance().tileFileSystemCache.clear()
-            } catch (e: Throwable) {
-                Log.w("MainActivity", "tile cache clear failed", e)
-            }
             // Cap tile cache at 50 MB so we don't fill device storage
-            Configuration.getInstance().tileFileSystemCacheMaxBytes = 50L * 1024 * 1024
-            Configuration.getInstance().tileFileSystemCacheTrimBytes = 40L * 1024 * 1024
+            tileCacheMaxBytes = 50L * 1024 * 1024
+            tileCacheTrimBytes = 40L * 1024 * 1024
         }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
