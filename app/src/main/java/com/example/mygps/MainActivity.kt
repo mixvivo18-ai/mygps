@@ -88,9 +88,6 @@ class MainActivity : AppCompatActivity() {
         Configuration.getInstance().apply {
             userAgentValue = "SP/1.0 (https://github.com/mixvivo18-ai/mygps; contact via repo)"
             load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
-            // Cap tile cache at 50 MB so we don't fill device storage
-            tileCacheMaxBytes = 50L * 1024 * 1024
-            tileCacheTrimBytes = 40L * 1024 * 1024
         }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
