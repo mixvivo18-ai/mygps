@@ -230,7 +230,7 @@ class MockLocationService : Service() {
                         speed = currentSpeed
                         time = now
                         elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() +
-                            Random.nextFloat() * 50_000_000f  // tiny jitter
+                            Random.nextLong(0L, 50_000_000L)  // tiny jitter
                     }
                     lm.setTestProviderLocation(LocationManager.GPS_PROVIDER, loc)
                     lm.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
