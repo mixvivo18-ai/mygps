@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">mygps</string>
+    <string name="app_name">SP</string>
 
     <!-- Toolbar -->
     <string name="action_settings">Settings</string>
@@ -28,8 +28,8 @@
     <string name="status_idle">Idle — set a location and tap Play</string>
     <string name="status_running">Mocking at %1$.6f, %2$.6f</string>
     <string name="status_permission_required">Location permission required to mock GPS</string>
-    <string name="status_dev_options_required">Developer Options &gt; Select mock location app &gt; mygps</string>
-    <string name="status_no_mock_app">Mock location app not set. Open Developer Options and pick mygps.</string>
+    <string name="status_dev_options_required">Developer Options &gt; Select mock location app &gt; SP</string>
+    <string name="status_no_mock_app">Mock location app not set. Open Developer Options and pick SP.</string>
 
     <!-- Buttons -->
     <string name="btn_start_mock">Start Mocking</string>

@@ -80,9 +80,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // osmdroid requires a User-Agent (app policy) and cache path
+        // osmdroid requires a User-Agent per OSM tile usage policy:
+// https://operations.osmfoundation.org/policies/tiles/
+// The UA must identify the application AND provide a way to contact the developer.
+// Using just the package name ("com.example.mygps") gets blocked with 403.
         Configuration.getInstance().apply {
-            userAgentValue = packageName
+            userAgentValue = "SP/1.0 (https://github.com/mixvivo18-ai/mygps; contact via repo)"
             load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
         }
 
@@ -136,11 +139,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupPlayButton() {
         binding.btnPlay.setOnClickListener {
-            val running = engine.state.value.isRunning
+            val running = MockLocationService.running.value
             if (running) {
-                engine.stop()
-                binding.btnPlay.setImageResource(R.drawable.ic_play)
-                binding.btnPlay.contentDescription = getString(R.string.btn_start_mock)
+                MockLocationService.stop(applicationContext)
                 Toast.makeText(this, R.string.mock_stopped, Toast.LENGTH_SHORT).show()
             } else {
                 ensureLocationPermissionThenStart()
@@ -152,13 +153,12 @@ class MainActivity : AppCompatActivity() {
         binding.toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_play -> {
-                    if (!engine.state.value.isRunning) ensureLocationPermissionThenStart()
+                    if (!MockLocationService.running.value) ensureLocationPermissionThenStart()
                     true
                 }
                 R.id.action_stop -> {
-                    if (engine.state.value.isRunning) {
-                        engine.stop()
-                        binding.btnPlay.setImageResource(R.drawable.ic_play)
+                    if (MockLocationService.running.value) {
+                        MockLocationService.stop(applicationContext)
                         Toast.makeText(this, R.string.mock_stopped, Toast.LENGTH_SHORT).show()
                     }
                     true
@@ -183,7 +183,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_search -> showSearchDialog()
                 R.id.nav_share -> shareCurrentLocation()
                 R.id.nav_rate -> openUrl("https://play.google.com/store/apps/details?id=$packageName")
-                R.id.nav_go_pro -> Toast.makeText(this, "mygps Pro — coming soon", Toast.LENGTH_SHORT).show()
+                R.id.nav_go_pro -> Toast.makeText(this, "SP Pro — coming soon", Toast.LENGTH_SHORT).show()
                 R.id.nav_privacy -> openUrl("https://example.com/privacy")
                 R.id.nav_detect_mock -> showDetectMockHelp()
                 R.id.nav_dev_settings -> openDeveloperOptions()
@@ -196,27 +196,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeEngineState() {
         lifecycleScope.launch {
-            engine.state.collect { s ->
-                if (s.isRunning) {
+            MockLocationService.running.collect { running ->
+                if (running) {
+                    val pt = marker?.position
                     binding.btnPlay.setImageResource(R.drawable.ic_stop)
                     binding.btnPlay.contentDescription = getString(R.string.btn_stop_mock)
                     binding.tvStatus.visibility = View.VISIBLE
                     binding.tvStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_ok))
-                    binding.tvStatus.text = getString(R.string.status_running, s.latitude, s.longitude)
+                    binding.tvStatus.text = getString(R.string.status_running, pt?.latitude ?: 0.0, pt?.longitude ?: 0.0)
                 } else {
                     binding.btnPlay.setImageResource(R.drawable.ic_play)
                     binding.btnPlay.contentDescription = getString(R.string.btn_start_mock)
-                    if (s.message != null && s.message != "Mocking stopped") {
-                        binding.tvStatus.text = s.message
+                    val msg = engine.state.value.message
+                    if (msg != null && msg != "Mocking stopped") {
+                        binding.tvStatus.text = msg
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_warn))
                         binding.tvStatus.visibility = View.VISIBLE
                     } else {
                         binding.tvStatus.visibility = View.GONE
                     }
                 }
-                if (s.isRunning) {
-                    refreshLatLngOverlay()
-                }
+                refreshLatLngOverlay()
             }
         }
     }
@@ -244,8 +244,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeUpdateRunningLocation(lat: Double, lng: Double) {
-        if (engine.state.value.isRunning) {
-            engine.updateLocation(lat, lng)
+        if (MockLocationService.running.value) {
+            // Restart the service with new coordinates
+            MockLocationService.start(applicationContext, lat, lng)
         }
         saveLastCoords(lat, lng, MockLocationEngine.DEFAULT_ACCURACY_M)
     }
@@ -274,35 +275,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun startMockFromUi() {
         val pt = marker?.position ?: GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
-        val result = engine.start(pt.latitude, pt.longitude)
-        when (result) {
-            MockLocationEngine.StartResult.OK -> {
-                Toast.makeText(this, R.string.mock_started, Toast.LENGTH_SHORT).show()
-            }
-            MockLocationEngine.StartResult.NO_LOCATION_PERMISSION ->
-                showPermissionDeniedHelp()
-            MockLocationEngine.StartResult.SECURITY_EXCEPTION,
-            MockLocationEngine.StartResult.PROVIDER_ALREADY_PRESENT -> {
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.status_dev_options_required)
-                    .setMessage(R.string.status_no_mock_app)
-                    .setPositiveButton(R.string.btn_open_settings) { _, _ ->
-                        openDeveloperOptions()
-                    }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
-            }
-            MockLocationEngine.StartResult.UNKNOWN_ERROR -> {
-                val msg = engine.state.value.message ?: getString(R.string.mock_failed, "Unknown")
-                Snackbar.make(binding.root, getString(R.string.mock_failed, msg), Snackbar.LENGTH_LONG).show()
-            }
-        }
+        // Delegate to the foreground service so the mock location keeps running
+        // even when the app is backgrounded.
+        MockLocationService.start(applicationContext, pt.latitude, pt.longitude)
+        Toast.makeText(this, R.string.mock_started, Toast.LENGTH_SHORT).show()
+        // Save last coords for next session
+        saveLastCoords(pt.latitude, pt.longitude, MockLocationEngine.DEFAULT_ACCURACY_M)
     }
 
     private fun showPermissionDeniedHelp() {
         AlertDialog.Builder(this)
             .setTitle(R.string.status_permission_required)
-            .setMessage("mygps needs location permission to inject mock GPS coordinates.")
+            .setMessage("SP needs location permission to inject mock GPS coordinates.")
             .setPositiveButton(R.string.btn_open_settings) { _, _ ->
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.fromParts("package", packageName, null)
@@ -409,12 +393,13 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_help)
             .setMessage("""
-                1) Tap Developer Options > Select mock location app > mygps
+                1) Tap Developer Options > Select mock location app > SP
                 2) Long-press the map to drop a pin, or use Search to find a place
                 3) Tap the blue Play button (or use the toolbar Play icon) to start mocking
                 4) Open any map app and your location will appear at the pinned coordinate
 
-                Tap Stop (square icon) to release the mock and restore real GPS.
+                The mock keeps running in the background even when you leave the app —
+                tap Stop (square icon) to release the mock and restore real GPS.
             """.trimIndent())
             .setPositiveButton(android.R.string.ok, null)
             .show()

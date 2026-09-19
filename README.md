@@ -1,11 +1,11 @@
-# mygps — Fake GPS บน Android
+# SP — Fake GPS (Mock Location) บน Android
 
 แอป Android สำหรับ **ปลอมตำแหน่ง GPS** ของเครื่อง ให้แอปอื่นๆ คิดว่ามือถืออยู่ ณ ตำแหน่งที่คุณเลือก โดยใช้ **Mock Location Provider API** ของ Android อย่างเป็นทางการ
 
 UI อ้างอิงจากแอป Fake GPS ดังนี้:
 
 - หน้าจอหลักเป็น **แผนที่ (osmdroid / OpenStreetMap)** เต็มจอ
-- Toolbar: hamburger | "Fake GPS" | play | stop | filter | more
+- Toolbar: hamburger | "SP" | play | stop | filter | more
 - **ปุ่ม play กลมใหญ่ มุมล่างขวา** สำหรับ start/stop
 - แถบ overlay แสดง Latitude / Longitude ด้านล่าง
 - Drawer menu: Change View / Search / Share / Rate Us / Go Pro / Privacy Policy / Detect mock locations / Development Settings / Help!
@@ -16,9 +16,9 @@ UI อ้างอิงจากแอป Fake GPS ดังนี้:
 
 ไปที่ **Settings → About phone → กด Build number 7 ครัศ**
 
-### 2) ตั้งค่า mygps เป็น mock location app
+### 2) ตั้งค่า SP เป็น mock location app
 
-ไปที่ **Settings → System → Developer Options → Select mock location app → mygps**
+ไปที่ **Settings → System → Developer Options → Select mock location app → SP**
 
 (ชื่อเมนูใน Android เวอร์ชันต่างๆ อาจต่างกันเล็กน้อย เช่น "Mock location app" หรือ "Set mock location app")
 
@@ -35,7 +35,7 @@ APK จะออกที่ `app/build/outputs/apk/debug/app-debug.apk` — เ
 
 ## วิธีใช้
 
-1. เปิดแอป mygps → จะเห็นแผนที่ ตำแหน่งเริ่มต้นอยู่ที่กรุงเทพฯ
+1. เปิดแอป SP → จะเห็นแผนที่ ตำแหน่งเริ่มต้นอยู่ที่กรุงเทพฯ
 2. **กดแผนที่ค้าง (long press)** ตรงไหนก็ได้ → ปักหมุดเลือกตำแหน่งนั้น
 3. หรือเปิด **hamburger menu → Search** แล้วพิมพ์ชื่อสถานที่ (เช่น "Tokyo") แล้วเลือกจากผลลัพธ์
 4. กด **ปุ่ม play มุมล่าบขวา** (หรือ play ใน toolbar) → เริ่ม mock GPS
@@ -62,7 +62,8 @@ mygps/
 │       │   ├── AndroidManifest.xml
 │       │   ├── java/com/example/mygps/
 │       │   │   ├── MainActivity.kt          # UI หลัก + drawer + map
-│       │   │   ├── MockLocationEngine.kt    # LocationManager test-provider
+│       │   │   ├── MockLocationService.kt   # Foreground service - ค้ำ mock location
+│       │   │   ├── MockLocationEngine.kt    # LocationManager test-provider (helper)
 │       │   │   ├── SavedLocations.kt        # SharedPreferences JSON store
 │       │   │   └── NominatimService.kt      # OpenStreetMap geocoding
 │       │   └── res/
