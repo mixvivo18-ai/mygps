@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
@@ -87,6 +88,16 @@ class MainActivity : AppCompatActivity() {
         Configuration.getInstance().apply {
             userAgentValue = "SP/1.0 (https://github.com/mixvivo18-ai/mygps; contact via repo)"
             load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
+            // Clear any cached failed tiles from older builds that used a blocked UA.
+            // Safe to call every launch — osmdroid's clear is fast.
+            try {
+                Configuration.getInstance().tileFileSystemCache.clear()
+            } catch (e: Throwable) {
+                Log.w("MainActivity", "tile cache clear failed", e)
+            }
+            // Cap tile cache at 50 MB so we don't fill device storage
+            Configuration.getInstance().tileFileSystemCacheMaxBytes = 50L * 1024 * 1024
+            Configuration.getInstance().tileFileSystemCacheTrimBytes = 40L * 1024 * 1024
         }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -117,7 +128,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMap() {
         binding.mapView.apply {
-            setTileSource(TileSourceFactory.MAPNIK)
+            // Use Wikimedia Maps tile server instead of openstreetmap.org main tiles.
+            // OSM main tiles aggressively blocks apps with insufficient User-Agents
+            // ("403 Access blocked") even if you do provide a UA. Wikimedia Maps
+            // serves the same OSM data via Wikimedia's CDN which is more permissive
+            // for legitimate apps and doesn't require an API key.
+            //
+            // Reference: https://wikimediafoundation.org/wiki/Maps_Terms_of_Use
+            val wikiTiles = XYTileSource(
+                "Wikimedia Maps",
+                0, 19, 256, ".png",
+                arrayOf("https://maps.wikimedia.org/osm-intl/"),
+                "© OpenStreetMap contributors"
+            )
+            setTileSource(wikiTiles)
             setMultiTouchControls(true)
             controller.setZoom(14.0)
             val start = GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
