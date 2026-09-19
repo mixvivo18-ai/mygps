@@ -384,7 +384,27 @@ class MainActivity : AppCompatActivity() {
     private fun showDetectMockHelp() {
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_detect_mock)
-            .setMessage("Some apps call Location.isFromMockProvider() or use Play Integrity API to detect mock locations. mygps sets the test provider cleanly, but it cannot bypass server-side checks like Snap, Pokémon GO, or banking apps.")
+            .setMessage("""
+                Many apps detect mock locations. Here's what they check:
+
+                • Location.isFromMockProvider() / Location.isMock() — this is set automatically by Android for any test provider added via addTestProvider. There is no way to bypass this from a non-rooted app.
+
+                • Cross-check with network (WiFi/cell) — if your mock location doesn't match the IP-based geolocation, the app may block.
+
+                • Play Integrity API — server-side check that flags rooted devices and custom ROMs.
+
+                What SP does to look natural:
+                • Adds small random jitter (~10m) to coordinates
+                • Varies accuracy, bearing, speed, altitude each tick
+                • Non-uniform tick intervals (real GPS isn't perfectly regular)
+
+                Bypasses that need root:
+                • Magisk + Mock Mock Locations module
+                • Xposed MockLocationRemover
+                • Custom ROM with location spoofing disabled
+
+                For business-critical apps like banking or payment, even rooted devices get flagged.
+            """.trimIndent())
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }

@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.random.Random
 
 /**
  * Foreground service that keeps the mock location engine alive even when the app
@@ -192,25 +194,59 @@ class MockLocationService : Service() {
             }
 
             _running.value = true
+            // State for simulating realistic movement so apps that look for
+            // "too perfect" mock locations don't flag us as easily.
+            var lastFixMs = 0L
+            var currentBearing = Random.nextDouble(0.0, 360.0)
+            var currentSpeed = 0f  // stationary
+
             while (isActive) {
                 try {
+                    // Add small random jitter to coordinates (~10m at equator)
+                    // 0.0001 degrees ≈ 11 meters
+                    val jitterLat = lat + Random.nextDouble(-0.00009, 0.00009)
+                    val jitterLng = lng + Random.nextDouble(-0.00009, 0.00009)
+
+                    // Vary accuracy slightly (real GPS wavers between 3-15m typical)
+                    val jitterAcc = accuracyM + Random.nextFloat() * 8f - 4f
+
+                    // Vary bearing and speed slowly (simulates stationary with drift)
+                    currentBearing = (currentBearing + Random.nextDouble(-5.0, 5.0) + 360.0) % 360.0
+                    currentSpeed = (currentSpeed + Random.nextFloat() * 0.4f - 0.2f).coerceIn(0f, 1.5f)
+
+                    // Realistic altitude for the mocked area (use a small range)
+                    val altitude = 5.0 + Random.nextDouble(-3.0, 3.0)
+
+                    // Vary the time delta slightly so timing isn't perfectly regular
+                    val now = System.currentTimeMillis()
+                    val fixDelay = if (lastFixMs == 0L) 0L else (now - lastFixMs)
+
                     val loc = Location(LocationManager.GPS_PROVIDER).apply {
-                        latitude = lat
-                        longitude = lng
-                        accuracy = accuracyM
-                        altitude = 0.0
-                        bearing = 0f
-                        speed = 0f
-                        time = System.currentTimeMillis()
-                        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                        latitude = jitterLat
+                        longitude = jitterLng
+                        accuracy = jitterAcc.coerceAtLeast(2.5f)
+                        this.altitude = altitude
+                        bearing = currentBearing.toFloat()
+                        speed = currentSpeed
+                        time = now
+                        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() +
+                            Random.nextFloat() * 50_000_000f  // tiny jitter
                     }
                     lm.setTestProviderLocation(LocationManager.GPS_PROVIDER, loc)
-                    // Re-arm the provider to keep it authoritative
                     lm.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
+
+                    lastFixMs = now
+                    if (fixDelay > 0L) {
+                        Log.d(TAG, "fix at %.5f,%.5f acc=%.1fm bearing=%.0f° speed=%.1fm/s delay=%dms"
+                            .format(jitterLat, jitterLng, jitterAcc, currentBearing, currentSpeed, fixDelay))
+                    }
                 } catch (e: Throwable) {
                     Log.w(TAG, "Tick failed", e)
                 }
-                delay(TICK_INTERVAL_MS)
+
+                // Vary the tick interval slightly (real GPS doesn't fix exactly every 1s)
+                val jitterMs = TICK_INTERVAL_MS + Random.nextLong(-150L, 150L)
+                delay(jitterMs)
             }
         }
     }
