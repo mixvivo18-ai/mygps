@@ -241,7 +241,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(3_000)
-                val st = MockLocationService.status()
+                val st = MockLocationService.snapshotStatus()
                 if (!st.running) {
                     // Show last error if we had one
                     val err = st.lastError
