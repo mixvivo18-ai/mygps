@@ -33,7 +33,6 @@ import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.MapTileProviderBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.overlay.MapEventsOverlay
@@ -450,6 +449,18 @@ class MainActivity : AppCompatActivity() {
     // ---------------- offline map cache ----------------
 
     /**
+     * Convert a lat/lon to tile X/Y at the given zoom using the slippy map convention.
+     */
+    private fun lonToTileX(lon: Double, z: Int): Int =
+        ((lon + 180.0) / 360.0 * (1 shl z)).toInt()
+
+    private fun latToTileY(lat: Double, z: Int): Int {
+        val latRad = Math.toRadians(lat)
+        val n = 1 shl z
+        return ((1.0 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2.0 * n).toInt()
+    }
+
+    /**
      * Pre-download tiles for the currently visible map area so the user can view
      * the map offline. Iterates over a small range of zooms around the current
      * zoom level (e.g. current-1 to current+1).
@@ -460,7 +471,6 @@ class MainActivity : AppCompatActivity() {
         val zoomMin = (centerZoom - 1).coerceAtLeast(8)
         val zoomMax = (centerZoom + 1).coerceAtMost(18)
 
-        val tileSource = binding.mapView.tileProvider.tileSource
         val tileProvider = binding.mapView.tileProvider
 
         val dialog = AlertDialog.Builder(this)
@@ -473,14 +483,15 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             var count = 0
             for (z in zoomMin..zoomMax) {
-                val tileBox = bb.getTileBox(z)
-                for (x in tileBox.minX..tileBox.maxX) {
-                    for (y in tileBox.minY..tileBox.maxY) {
+                val xMin = lonToTileX(bb.lonWest, z)
+                val xMax = lonToTileX(bb.lonEast, z)
+                // Y goes north->south in slippy maps
+                val yMin = latToTileY(bb.latNorth, z)
+                val yMax = latToTileY(bb.latSouth, z)
+                for (x in xMin..xMax) {
+                    for (y in yMin..yMax) {
                         val tileIndex = MapTileIndex.getTileIndex(z, x, y)
-                        runCatching {
-                            // requestTile triggers download + cache
-                            tileProvider.getMapTile(tileIndex)
-                        }
+                        runCatching { tileProvider.getMapTile(tileIndex) }
                         count++
                     }
                 }
