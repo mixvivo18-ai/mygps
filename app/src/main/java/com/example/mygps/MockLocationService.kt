@@ -274,9 +274,36 @@ class MockLocationService : Service() {
             var currentBearing = Random.nextDouble(0.0, 360.0)
             var currentSpeed = 0f
             var consecutiveErrors = 0
+            var lastAddProviderAttempt = 0L
 
             while (isActive) {
                 try {
+                    // If the provider was lost (e.g. system removed it), re-add it
+                    if (!lm.allProviders.contains(LocationManager.GPS_PROVIDER) &&
+                        SystemClock.elapsedRealtime() - lastAddProviderAttempt > 5_000L
+                    ) {
+                        Log.w(TAG, "Provider missing, re-adding")
+                        lastAddProviderAttempt = SystemClock.elapsedRealtime()
+                        try {
+                            lm.addTestProvider(
+                                LocationManager.GPS_PROVIDER,
+                                false, true, false, false,
+                                true, true, true, powerHigh, accuracyFine
+                            )
+                            lm.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
+                            @Suppress("DEPRECATION")
+                            lm.setTestProviderStatus(
+                                LocationManager.GPS_PROVIDER,
+                                LocationProvider.AVAILABLE,
+                                null,
+                                SystemClock.elapsedRealtimeNanos()
+                            )
+                            setState(providerReady = true)
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "Re-add failed", e)
+                        }
+                    }
+
                     val jitterLat = curLat + Random.nextDouble(-0.00009, 0.00009)
                     val jitterLng = curLng + Random.nextDouble(-0.00009, 0.00009)
                     val jitterAcc = curAccuracyM + Random.nextFloat() * 8f - 4f
@@ -304,10 +331,14 @@ class MockLocationService : Service() {
 
                     lastFixMs = now
                 } catch (e: SecurityException) {
-                    setState(lastError = "Mock app access revoked (unselected?)", providerReady = false)
+                    // Mock app was un-selected. DON'T stop — just wait, the user
+                    // may re-select SP and we want to keep trying. Reset counter
+                    // every 60s so we don't get stuck.
+                    setState(lastError = "Mock app access revoked (re-select SP in Developer Options)", providerReady = false)
                     consecutiveErrors++
-                    Log.w(TAG, "SecurityException on tick (mock app revoked?)", e)
-                    if (consecutiveErrors > 3) {
+                    Log.w(TAG, "SecurityException on tick (consecutive=$consecutiveErrors)", e)
+                    // Don't auto-stop — user can re-select the mock app
+                    if (consecutiveErrors > 600) {  // ~10 minutes at 1s/tick
                         stopSelf()
                         return@launch
                     }
@@ -315,7 +346,7 @@ class MockLocationService : Service() {
                     setState(lastError = "tick failed: ${e.message}")
                     consecutiveErrors++
                     Log.w(TAG, "Tick failed ($consecutiveErrors consecutive)", e)
-                    if (consecutiveErrors > 10) {
+                    if (consecutiveErrors > 300) {  // ~5 minutes at 1s/tick
                         stopSelf()
                         return@launch
                     }

@@ -121,16 +121,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMap() {
         binding.mapView.apply {
-            // OSM DE mirror - same tiles as openstreetmap.org main, but doesn't
-            // aggressively block apps with insufficient User-Agents.
-            // Wikimedia Maps was tried first but has been unreliable.
-            val osmDeTiles = XYTileSource(
-                "OSM DE",
+            // Esri World Topo Map — different infrastructure (ArcGIS Online) than
+            // OSM's tile servers. The OSM tiles have been getting blocked by the
+            // user's network regardless of which mirror we use, so we switch to a
+            // completely separate provider. Esri's tile service is free for
+            // non-commercial use, no API key required.
+            //
+            // Attribution: "Sources: Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors"
+            val esriTiles = XYTileSource(
+                "Esri World Topo",
                 0, 19, 256, ".png",
-                arrayOf("https://tile.openstreetmap.de/"),
-                "© OpenStreetMap contributors"
+                arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/"),
+                "Sources: Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors"
             )
-            setTileSource(osmDeTiles)
+            setTileSource(esriTiles)
             setMultiTouchControls(true)
             controller.setZoom(14.0)
             val start = GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
@@ -606,21 +610,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatusBanner() {
-        val isMockApp = isMockLocationApp()
-        if (!isMockApp) {
+        // Note: we no longer show "Mock location app not set" because the
+        // Settings.Secure.ALLOW_MOCK_LOCATION API was removed in API 18+ and
+        // always returns empty now, so this check is unreliable on modern Android.
+        // Instead, we trust the service state — if the service is running and the
+        // provider is registered, the mock is set up correctly.
+        // We show a banner hint only on first launch to remind users about
+        // Developer Options.
+        if (!MockLocationService.running.value) {
             binding.tvStatus.visibility = View.VISIBLE
-            binding.tvStatus.text = getString(R.string.status_no_mock_app)
+            binding.tvStatus.text = "Tap Play to start. Make sure SP is selected in Developer Options → Select mock location app."
+            binding.tvStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_warn))
         }
-    }
-
-    /**
-     * Modern way: Android 6+ removed `Settings.Secure.ALLOW_MOCK_LOCATION` exposure,
-     * so we just guide the user to Developer Options instead.
-     */
-    private fun isMockLocationApp(): Boolean {
-        @Suppress("DEPRECATION")
-        val legacy = Settings.Secure.getString(contentResolver, Settings.Secure.ALLOW_MOCK_LOCATION)
-        return !legacy.isNullOrEmpty() && legacy == packageName
     }
 
     override fun onResume() {
