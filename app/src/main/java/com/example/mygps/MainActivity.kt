@@ -30,9 +30,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.MapTileProviderBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 
@@ -118,20 +121,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMap() {
         binding.mapView.apply {
-            // Use Wikimedia Maps tile server instead of openstreetmap.org main tiles.
-            // OSM main tiles aggressively blocks apps with insufficient User-Agents
-            // ("403 Access blocked") even if you do provide a UA. Wikimedia Maps
-            // serves the same OSM data via Wikimedia's CDN which is more permissive
-            // for legitimate apps and doesn't require an API key.
-            //
-            // Reference: https://wikimediafoundation.org/wiki/Maps_Terms_of_Use
-            val wikiTiles = XYTileSource(
-                "Wikimedia Maps",
+            // OSM DE mirror - same tiles as openstreetmap.org main, but doesn't
+            // aggressively block apps with insufficient User-Agents.
+            // Wikimedia Maps was tried first but has been unreliable.
+            val osmDeTiles = XYTileSource(
+                "OSM DE",
                 0, 19, 256, ".png",
-                arrayOf("https://maps.wikimedia.org/osm-intl/"),
+                arrayOf("https://tile.openstreetmap.de/"),
                 "© OpenStreetMap contributors"
             )
-            setTileSource(wikiTiles)
+            setTileSource(osmDeTiles)
             setMultiTouchControls(true)
             controller.setZoom(14.0)
             val start = GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
@@ -175,6 +174,10 @@ class MainActivity : AppCompatActivity() {
                         MockLocationService.stop(applicationContext)
                         Toast.makeText(this, R.string.mock_stopped, Toast.LENGTH_SHORT).show()
                     }
+                    true
+                }
+                R.id.action_offline -> {
+                    downloadOfflineCache()
                     true
                 }
                 R.id.action_filter -> {
@@ -442,6 +445,50 @@ class MainActivity : AppCompatActivity() {
     private fun openUrl(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             .onFailure { Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show() }
+    }
+
+    // ---------------- offline map cache ----------------
+
+    /**
+     * Pre-download tiles for the currently visible map area so the user can view
+     * the map offline. Iterates over a small range of zooms around the current
+     * zoom level (e.g. current-1 to current+1).
+     */
+    private fun downloadOfflineCache() {
+        val bb = binding.mapView.boundingBox
+        val centerZoom = binding.mapView.zoomLevelDouble.toInt()
+        val zoomMin = (centerZoom - 1).coerceAtLeast(8)
+        val zoomMax = (centerZoom + 1).coerceAtMost(18)
+
+        val tileSource = binding.mapView.tileProvider.tileSource
+        val tileProvider = binding.mapView.tileProvider
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Save map for offline")
+            .setMessage("Downloading tiles zoom $zoomMin..$zoomMax for the current view…\nThis may take a moment.")
+            .setCancelable(false)
+            .create()
+        dialog.show()
+
+        lifecycleScope.launch {
+            var count = 0
+            for (z in zoomMin..zoomMax) {
+                val tileBox = bb.getTileBox(z)
+                for (x in tileBox.minX..tileBox.maxX) {
+                    for (y in tileBox.minY..tileBox.maxY) {
+                        val tileIndex = MapTileIndex.getTileIndex(z, x, y)
+                        runCatching {
+                            // requestTile triggers download + cache
+                            tileProvider.getMapTile(tileIndex)
+                        }
+                        count++
+                    }
+                }
+            }
+            dialog.dismiss()
+            val msg = if (count > 0) "Saved $count tiles for offline use" else "No tiles saved"
+            Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()
+        }
     }
 
     // ---------------- saved locations ----------------

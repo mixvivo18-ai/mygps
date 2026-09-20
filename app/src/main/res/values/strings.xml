@@ -8,6 +8,7 @@
     <string name="action_stop">Stop</string>
     <string name="action_filter">Filter</string>
     <string name="action_more">More</string>
+    <string name="action_offline">Save map offline</string>
 
     <!-- Drawer / menu -->
     <string name="menu_change_view">Change View</string>
