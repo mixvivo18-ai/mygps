@@ -235,6 +235,27 @@ class MainActivity : AppCompatActivity() {
                 refreshLatLngOverlay()
             }
         }
+
+        // Poll service status periodically to surface any errors
+        lifecycleScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(3_000)
+                val st = MockLocationService.status()
+                if (!st.running) {
+                    // Show last error if we had one
+                    val err = st.lastError
+                    if (err != null && binding.btnPlay.contentDescription == getString(R.string.btn_stop_mock)) {
+                        binding.tvStatus.text = "Mock error: $err"
+                        binding.tvStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_warn))
+                        binding.tvStatus.visibility = View.VISIBLE
+                    }
+                } else if (!st.providerReady) {
+                    binding.tvStatus.text = "Provider not registered — check Developer Options"
+                    binding.tvStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_warn))
+                    binding.tvStatus.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
     // ---------------- map helpers ----------------
@@ -291,6 +312,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun startMockFromUi() {
         val pt = marker?.position ?: GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
+        // Ask user to disable battery optimization so OEM savers don't kill us
+        requestIgnoreBatteryOptimization()
         // Delegate to the foreground service so the mock location keeps running
         // even when the app is backgrounded.
         MockLocationService.start(applicationContext, pt.latitude, pt.longitude)
@@ -319,6 +342,31 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.w(TAG, "no dev settings", e)
             startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
+    /**
+     * Request the user to disable battery optimization for SP. Without this, OEMs
+     * like Xiaomi/Huawei/OPPO will kill the foreground service after a few minutes.
+     */
+    private fun requestIgnoreBatteryOptimization() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (pm == null) return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return  // already granted
+
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = android.net.Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (e: Throwable) {
+            Log.w(TAG, "could not request battery optimization exemption", e)
+            // Fallback to general battery settings
+            try {
+                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (e2: Throwable) {
+                Log.w(TAG, "battery optimization settings not available", e2)
+            }
         }
     }
 

@@ -14,7 +14,9 @@ import android.location.LocationProvider
 import android.location.provider.ProviderProperties
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
@@ -88,10 +90,30 @@ class MockLocationService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tickerJob: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private var lat: Double = 0.0
     private var lng: Double = 0.0
     private var accuracyM: Float = 5.0f
+    private var lastError: String? = null
+    private var providerReady: Boolean = false
+
+    /** Exposed so MainActivity can show real diagnostic info to the user. */
+    fun status(): ServiceStatus = ServiceStatus(
+        running = _running.value,
+        lat = lat,
+        lng = lng,
+        providerReady = providerReady,
+        lastError = lastError
+    )
+
+    data class ServiceStatus(
+        val running: Boolean,
+        val lat: Double,
+        val lng: Double,
+        val providerReady: Boolean,
+        val lastError: String?
+    )
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -140,6 +162,22 @@ class MockLocationService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
+        // Acquire a partial wake lock so doze doesn't kill our ticker.
+        // OEM battery savers (Xiaomi, Huawei, OPPO) are aggressive — wake lock helps
+        // but not always; user should also disable battery optimization for SP.
+        try {
+            if (wakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "SP::MockLocationTicker"
+                ).apply { setReferenceCounted(false) }
+            }
+            wakeLock?.acquire(/* timeout in ms = 0 = indefinite */ 60L * 60L * 1000L)
+        } catch (e: Throwable) {
+            Log.w(TAG, "wakeLock acquire failed", e)
+        }
+
         // If the ticker is already running, the new lat/lng/accuracy values will be
         // picked up on the next tick (≤1 second). No need to restart.
         if (tickerJob?.isActive == true) {
@@ -147,7 +185,11 @@ class MockLocationService : Service() {
             return
         }
         tickerJob = scope.launch {
-            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return@launch
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: run {
+                lastError = "LocationManager service not available"
+                stopSelf()
+                return@launch
+            }
             val powerHigh =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                     ProviderProperties.POWER_USAGE_HIGH
@@ -183,11 +225,25 @@ class MockLocationService : Service() {
                 } catch (e: Throwable) {
                     Log.w(TAG, "setTestProviderStatus failed", e)
                 }
+
+                // Verify the provider actually registered
+                val providers = lm.allProviders
+                if (LocationManager.GPS_PROVIDER in providers) {
+                    providerReady = true
+                    lastError = null
+                    Log.i(TAG, "Test provider registered. providers=$providers")
+                } else {
+                    providerReady = false
+                    lastError = "Provider not in allProviders list (${providers})"
+                    Log.e(TAG, lastError!!)
+                }
             } catch (e: SecurityException) {
+                lastError = "App not selected as mock location app. Enable in Developer Options."
                 Log.e(TAG, "Add provider failed — app not selected as mock app", e)
                 stopSelf()
                 return@launch
             } catch (e: Throwable) {
+                lastError = "addTestProvider failed: ${e.message}"
                 Log.e(TAG, "Add provider failed", e)
                 stopSelf()
                 return@launch
@@ -199,25 +255,19 @@ class MockLocationService : Service() {
             var lastFixMs = 0L
             var currentBearing = Random.nextDouble(0.0, 360.0)
             var currentSpeed = 0f  // stationary
+            var consecutiveErrors = 0
 
             while (isActive) {
                 try {
                     // Add small random jitter to coordinates (~10m at equator)
-                    // 0.0001 degrees ≈ 11 meters
                     val jitterLat = lat + Random.nextDouble(-0.00009, 0.00009)
                     val jitterLng = lng + Random.nextDouble(-0.00009, 0.00009)
 
-                    // Vary accuracy slightly (real GPS wavers between 3-15m typical)
                     val jitterAcc = accuracyM + Random.nextFloat() * 8f - 4f
-
-                    // Vary bearing and speed slowly (simulates stationary with drift)
                     currentBearing = (currentBearing + Random.nextDouble(-5.0, 5.0) + 360.0) % 360.0
                     currentSpeed = (currentSpeed + Random.nextFloat() * 0.4f - 0.2f).coerceIn(0f, 1.5f)
-
-                    // Realistic altitude for the mocked area (use a small range)
                     val altitude = 5.0 + Random.nextDouble(-3.0, 3.0)
 
-                    // Vary the time delta slightly so timing isn't perfectly regular
                     val now = System.currentTimeMillis()
                     val fixDelay = if (lastFixMs == 0L) 0L else (now - lastFixMs)
 
@@ -230,21 +280,38 @@ class MockLocationService : Service() {
                         speed = currentSpeed
                         time = now
                         elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() +
-                            Random.nextLong(0L, 50_000_000L)  // tiny jitter
+                            Random.nextLong(0L, 50_000_000L)
                     }
-                    lm.setTestProviderLocation(LocationManager.GPS_PROVIDER, loc)
+                    // Re-set enabled to keep our provider authoritative
                     lm.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
+                    lm.setTestProviderLocation(LocationManager.GPS_PROVIDER, loc)
+                    consecutiveErrors = 0
+                    lastError = null
+                    providerReady = true
 
                     lastFixMs = now
-                    if (fixDelay > 0L) {
-                        Log.d(TAG, "fix at %.5f,%.5f acc=%.1fm bearing=%.0f° speed=%.1fm/s delay=%dms"
-                            .format(jitterLat, jitterLng, jitterAcc, currentBearing, currentSpeed, fixDelay))
+                    if (fixDelay > 0L && fixDelay > 2000L) {
+                        Log.w(TAG, "Long delay between fixes: ${fixDelay}ms")
+                    }
+                } catch (e: SecurityException) {
+                    // Mock app was un-selected mid-run
+                    lastError = "Mock app access revoked"
+                    consecutiveErrors++
+                    Log.w(TAG, "SecurityException on tick (mock app revoked?)", e)
+                    if (consecutiveErrors > 3) {
+                        stopSelf()
+                        return@launch
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "Tick failed", e)
+                    lastError = "tick failed: ${e.message}"
+                    consecutiveErrors++
+                    Log.w(TAG, "Tick failed ($consecutiveErrors consecutive)", e)
+                    if (consecutiveErrors > 10) {
+                        stopSelf()
+                        return@launch
+                    }
                 }
 
-                // Vary the tick interval slightly (real GPS doesn't fix exactly every 1s)
                 val jitterMs = TICK_INTERVAL_MS + Random.nextLong(-150L, 150L)
                 delay(jitterMs)
             }
@@ -255,6 +322,7 @@ class MockLocationService : Service() {
         tickerJob?.cancel()
         tickerJob = null
         _running.value = false
+        providerReady = false
         runCatching {
             val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             if (lm != null) {
@@ -262,6 +330,10 @@ class MockLocationService : Service() {
                 try { lm.removeTestProvider(LocationManager.GPS_PROVIDER) } catch (_: Throwable) {}
             }
         }
+        runCatching {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        }
+        wakeLock = null
     }
 
     private fun stopForegroundCompat() {
