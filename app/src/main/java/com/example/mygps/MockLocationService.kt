@@ -401,12 +401,22 @@ class MockLocationService : Service() {
 
     private fun buildNotification(): Notification {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingIntent = launchIntent?.let {
+        val launchPendingIntent = launchIntent?.let {
             PendingIntent.getActivity(
                 this, 0, it,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
+
+        // Add a "Stop" action so user can stop the service from the notification
+        // without opening the app
+        val stopIntent = Intent(this, MockLocationService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_my_location)
@@ -415,8 +425,9 @@ class MockLocationService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(launchPendingIntent)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .addAction(0, "Stop", stopPendingIntent)
             .build()
     }
 

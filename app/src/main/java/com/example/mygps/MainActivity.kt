@@ -121,20 +121,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMap() {
         binding.mapView.apply {
-            // Esri World Topo Map — different infrastructure (ArcGIS Online) than
-            // OSM's tile servers. The OSM tiles have been getting blocked by the
-            // user's network regardless of which mirror we use, so we switch to a
-            // completely separate provider. Esri's tile service is free for
-            // non-commercial use, no API key required.
+            // CartoDB Voyager — entirely separate infrastructure from OSM and
+            // Esri. Uses Cloudflare CDN. Free, no API key required, no UA
+            // restrictions on tile downloads.
             //
-            // Attribution: "Sources: Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors"
-            val esriTiles = XYTileSource(
-                "Esri World Topo",
+            // Tiles we've tried and got blocked on the user's device:
+            //   - openstreetmap.org (main)
+            //   - tile.openstreetmap.de (mirror)
+            //   - maps.wikimedia.org (Wikimedia CDN)
+            //   - server.arcgisonline.com (Esri - tried in v1.0.6)
+            //
+            // If CartoDB also fails, the next step would be to bundle MBTiles
+            // inside the APK so the map works offline by default.
+            val cartoTiles = XYTileSource(
+                "CartoDB Voyager",
                 0, 19, 256, ".png",
-                arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/"),
-                "Sources: Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors"
+                arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/"),
+                "© OpenStreetMap contributors © CARTO"
             )
-            setTileSource(esriTiles)
+            setTileSource(cartoTiles)
             setMultiTouchControls(true)
             controller.setZoom(14.0)
             val start = GeoPoint(DEFAULT_LAT, DEFAULT_LNG)
