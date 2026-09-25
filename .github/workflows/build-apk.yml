@@ -71,7 +71,7 @@ jobs:
           file app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mygps-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: |
